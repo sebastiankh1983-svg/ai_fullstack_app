@@ -1,8 +1,26 @@
-# Virtual Environment
+# Virtuelle Umgebung und große Dateien
 .venv/
 venv/
 env/
-ENV/
+*.dll
+*.so
+*.dylib
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# Modelle (optional - zum Teilen auskommentieren)
+# mnist_model.keras
+# *.h5
+
+# Training-Bilder (können weggelassen werden)
+training_image.png
+predictions_visualization.png
 
 # IDE
 .idea/
@@ -10,46 +28,17 @@ ENV/
 *.swp
 *.swo
 
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# Flask
-instance/
-.webassets-cache
-
-# Models
-*.keras
-*.h5
-*.pkl
-
 # OS
 .DS_Store
 Thumbs.db
 
 # Logs
 *.log
+firebase-debug.log
 
-# Temporary files
-*.tmp
-training_image.png
-predictions_visualization.png
+# Screenshots (optional)
+Screenshot*.png
+
+# Node modules (falls benötigt)
+node_modules/
 

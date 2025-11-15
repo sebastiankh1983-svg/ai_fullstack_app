@@ -1,65 +1,105 @@
-from flask import Flask, jsonify, request
+from flask import Flask, request, jsonify
 from flask_cors import CORS
-import numpy as np
-from tensorflow import keras
 from PIL import Image
+import numpy as np
+import tensorflow as tf
+from tensorflow import keras
 import io
+import base64
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
+CORS(app)
 
-model = keras.models.load_model("mnist_model.keras")
-print("MNIST Model Loaded")
-print("="*60)
+# Modell beim Start laden
+print("Lade MNIST Modell...")
+try:
+    model = keras.models.load_model('mnist_model.keras')
+    print("✓ Modell erfolgreich geladen!")
+except Exception as e:
+    print(f"✗ Fehler beim Laden des Modells: {e}")
+    model = None
 
 @app.route('/')
 def home():
-    return jsonify({'Status': 'Welcome to my app!', "endpoint": "/api/predict"})
+    return jsonify({
+        'status': 'Backend läuft',
+        'model_loaded': model is not None,
+        'endpoints': [
+            '/predict - POST: Sendet Bild für Vorhersage',
+            '/health - GET: Überprüft Backend-Status'
+        ]
+    })
 
-@app.route('/api/predict', methods=['POST'])
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({
+        'status': 'healthy',
+        'model_loaded': model is not None
+    })
+
+@app.route('/predict', methods=['POST'])
 def predict():
+    if model is None:
+        return jsonify({'error': 'Modell nicht geladen'}), 500
+
     try:
-        # Get file from request - Frontend sends 'file'
-        if 'file' not in request.files:
-            return jsonify({'success': False, 'error': 'Keine Datei hochgeladen'}), 400
+        # Empfange Bild
+        if 'image' not in request.files:
+            # Alternative: Base64-kodiertes Bild
+            data = request.get_json()
+            if data and 'image' in data:
+                # Base64-Bild dekodieren
+                image_data = data['image']
+                if ',' in image_data:
+                    image_data = image_data.split(',')[1]
+                image_bytes = base64.b64decode(image_data)
+                image = Image.open(io.BytesIO(image_bytes))
+            else:
+                return jsonify({'error': 'Kein Bild gefunden'}), 400
+        else:
+            # Normaler File-Upload
+            file = request.files['image']
+            image = Image.open(file.stream)
 
-        file = request.files['file']
+        # Bild vorverarbeiten
+        # In Graustufen konvertieren
+        image = image.convert('L')
 
-        if file.filename == '':
-            return jsonify({'success': False, 'error': 'Keine Datei ausgewählt'}), 400
+        # Auf 28x28 skalieren
+        image = image.resize((28, 28))
 
-        # Read and process image
-        img = Image.open(io.BytesIO(file.read())).convert('L')  # Convert to grayscale
-        img = img.resize((28, 28))  # Resize to 28x28
-        img_array = np.array(img).astype('float32') / 255.0  # Normalize
+        # In NumPy-Array umwandeln
+        img_array = np.array(image)
 
-        # WICHTIG: Bild invertieren (weißer Hintergrund -> schwarzer Hintergrund)
-        # MNIST hat schwarzen Hintergrund mit weißen Ziffern
-        if np.mean(img_array) > 0.5:  # Wenn heller Hintergrund
-            img_array = 1.0 - img_array  # Invertieren
+        # Normalisieren (0-255 -> 0-1)
+        img_array = img_array.astype('float32') / 255.0
 
-        img_array = img_array.reshape(1, 28, 28)  # Reshape for model input
+        # Reshape für das Modell (1, 28, 28)
+        img_array = np.expand_dims(img_array, axis=0)
 
-        # Make prediction
+        # Vorhersage machen
         predictions = model.predict(img_array, verbose=0)
-        predicted_class = np.argmax(predictions, axis=1)[0]
-        confidence = float(np.max(predictions))
+        predicted_digit = int(np.argmax(predictions[0]))
+        confidence = float(predictions[0][predicted_digit])
 
-        # Get all probabilities for visualization
-        all_probabilities = predictions[0].tolist()
-        probabilities_dict = {str(i): round(float(prob) * 100, 2) for i, prob in enumerate(all_probabilities)}
+        # Alle Wahrscheinlichkeiten zurückgeben
+        all_probabilities = {
+            str(i): float(predictions[0][i])
+            for i in range(10)
+        }
 
-        # Return response in format expected by frontend
         return jsonify({
-            'success': True,
-            'prediction': int(predicted_class),
-            'confidence': round(confidence * 100, 2),
-            'probabilities': probabilities_dict
+            'prediction': predicted_digit,
+            'confidence': confidence,
+            'all_probabilities': all_probabilities
         })
 
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 400
-
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    print("="*60)
+    print("🚀 Flask Backend wird gestartet...")
+    print("="*60)
+    app.run(debug=True, host='0.0.0.0', port=5000)
+
