@@ -66,16 +66,24 @@ def predict():
         image = image.convert('L')
 
         # Auf 28x28 skalieren
-        image = image.resize((28, 28))
+        image = image.resize((28, 28), Image.Resampling.LANCZOS)
 
         # In NumPy-Array umwandeln
         img_array = np.array(image)
 
+        # WICHTIG: MNIST hat weiße Ziffern auf schwarzem Hintergrund
+        # Falls Ihr Frontend schwarze Ziffern auf weißem Hintergrund sendet, invertieren:
+        # Prüfen ob Hintergrund hell ist (Durchschnittswert > 127)
+        if np.mean(img_array) > 127:
+            img_array = 255 - img_array  # Invertieren
+
         # Normalisieren (0-255 -> 0-1)
         img_array = img_array.astype('float32') / 255.0
 
-        # Reshape für das Modell (1, 28, 28)
-        img_array = np.expand_dims(img_array, axis=0)
+        # Reshape für CNN-Modell (1, 28, 28, 1)
+        # Batch-Dimension + Kanal-Dimension
+        img_array = np.expand_dims(img_array, axis=0)  # (1, 28, 28)
+        img_array = np.expand_dims(img_array, axis=-1)  # (1, 28, 28, 1)
 
         # Vorhersage machen
         predictions = model.predict(img_array, verbose=0)
@@ -88,10 +96,18 @@ def predict():
             for i in range(10)
         }
 
+        # Debug: Vorverarbeitetes Bild als Base64 zurückgeben
+        processed_img = (img_array[0, :, :, 0] * 255).astype(np.uint8)
+        processed_pil = Image.fromarray(processed_img, mode='L')
+        buffered = io.BytesIO()
+        processed_pil.save(buffered, format="PNG")
+        processed_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+
         return jsonify({
             'prediction': predicted_digit,
             'confidence': confidence,
-            'all_probabilities': all_probabilities
+            'all_probabilities': all_probabilities,
+            'processed_image': f'data:image/png;base64,{processed_base64}'  # Debug
         })
 
     except Exception as e:
